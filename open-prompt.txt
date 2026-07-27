@@ -1,0 +1,132 @@
+Build a Python script in this repo that generates practice worksheets for proofreading 
+(hagaha) of Hebrew STA"M texts (mezuzah/tefillin parashot), for a person training 
+themselves to spot textual errors visually.
+
+## Source text
+Use the four parashot traditionally found in tefillin/mezuzah:
+- Kadesh (Shemot 13:1-10)
+- Vehaya ki yeviacha (Shemot 13:11-16)
+- Shema (Devarim 6:4-9)
+- Vehaya im shamoa (Devarim 11:13-21)
+Store the correct, clean Hebrew text (with nikkud OFF — STA"M is written without nikkud) 
+as plain text constants or a small JSON/text file in the repo, one entry per parasha, 
+word-tokenized (a Python list of words per parasha), so individual words can be 
+programmatically modified.
+
+## Text sourcing
+The base text for the four parashot must be halachically accurate STA"M-style Hebrew 
+(unvocalized, no nikkud, no cantillation marks, no verse/chapter numbers), matching the 
+conventional plene/defective (male/chaser) spelling used in actual mezuzah/tefillin 
+parchments — NOT necessarily identical to a standard printed Tanakh edition.
+
+Preferred approach:
+1. Fetch the base text of the four parashot (Shemot 13:1-10, Shemot 13:11-16, 
+   Devarim 6:4-9, Devarim 11:13-21) via the Sefaria API 
+   (https://www.sefaria.org/api/texts/...) using the Hebrew text endpoint.
+2. Strip all nikkud (vowel points, U+05B0–U+05BC, U+05C1–U+05C2, U+05C7) and cantillation 
+   marks (U+0591–U+05AF) programmatically, keeping only consonants and final-letter forms.
+3. IMPORTANT CAVEAT: Sefaria's text follows standard Masoretic/printed Tanakh spelling, 
+   which can differ from the traditional STA"M sofer spelling (male/chaser conventions) 
+   used specifically for mezuzah/tefillin parchments — these are well-documented, 
+   fixed differences (a small, known list per parasha, not open-ended). Because the 
+   generator explicitly injects MALE_CHASER_SWAP errors, the baseline text's plene/
+   defective spelling must be correct per STA"M convention, not per Sefaria's default.
+   
+   Therefore: fetch from Sefaria as a starting point, but include a hardcoded 
+   `STAM_SPELLING_OVERRIDES` dict in the script (word_index -> corrected_spelling) 
+   for known STA"M-specific male/chaser deviations from the Sefaria text in these four 
+   parashot, and apply these overrides after fetching. Leave this dict as clearly 
+   commented placeholders/TODOs if the exact overrides aren't known at code-writing time, 
+   so the user (who has the domain knowledge) can fill them in and verify against a 
+   trusted printed Tikkun Soferim before relying on the app for real practice.
+4. If the Sefaria API is unreachable or fails, fall back to a hardcoded local copy of 
+   the text stored in the repo, and print a warning.
+5. Cache the fetched/cleaned text locally (e.g. in a JSON file) after the first 
+   successful fetch, so the script doesn't require network access on every run.
+
+## Config header
+At the top of the script, put a clearly marked CONFIG section (plain variables, no CLI 
+args needed) with:
+- NUM_TEXTS = 20          # how many test texts to generate
+- FONT_PATH = "/usr/share/fonts/truetype/culmus/StamAshkenazCLM.ttf"   # already installed 
+  system font (Culmus package), do NOT bundle a font file in the repo — just reference 
+  this absolute path. At script start, check os.path.exists(FONT_PATH) and raise a clear 
+  error message if it's missing, telling the user to verify the Culmus fonts package is 
+  installed (e.g. via `fc-list | grep -i stam`).
+- FONT_SIZE = 40
+- IMAGE_WIDTH / IMAGE_MARGIN / LINE_SPACING (reasonable defaults for readable output)
+- ERRORS_PER_TEXT = 1          # how many errors to inject per generated text (allow 1-2)
+- ERROR_TYPES = list of enabled error type keys (see taxonomy below) — all enabled by default
+- OUTPUT_DIR = "output/"
+- RANDOM_SEED (optional, for reproducibility)
+
+## Error taxonomy (implement as an Enum / list of injector functions)
+Each error type is a self-contained function that takes a word list + parasha context 
+and returns a modified word list + a human-readable description of what was changed and 
+where (for the answer key). Implement these categories:
+
+1. MISSING_LETTER — remove one letter from a word (prefer words with doubled/similar 
+   adjacent letters when possible).
+2. EXTRA_LETTER — duplicate a letter within a word, or insert a visually similar letter.
+3. MALE_CHASER_SWAP — toggle a ו or י in/out of a word (plene/defective spelling swap).
+4. SIMILAR_LETTER_SWAP — replace a letter with a visually similar one, using this pair 
+   pool: ד/ר, ה/ח, ו/ז/י, כ/ב/פ, ם/ס, ע/צ, ג/נ.
+5. LETTER_TRANSPOSITION — swap two adjacent letters within a word.
+6. WORD_BOUNDARY_ERROR — merge two adjacent words into one, or split one word into two.
+7. SKIP_DUE_TO_SIMILARITY — delete a word or short phrase, simulating an eye-skip 
+   between two similar/repeated words nearby (only apply where the parasha text actually 
+   has such repetition, e.g. repeated words within a few words of each other).
+8. WORD_DUPLICATION — duplicate a word or short word sequence.
+9. SIMILAR_FUNCTION_WORD_SWAP — swap a short function word for another that differs by 
+   only one letter (build a small hardcoded mapping of relevant word pairs that actually 
+   occur in these four parashot).
+10. SUFFIX_ERROR — modify a word's suffix (e.g. singular/plural or pronominal suffix) by 
+    one letter.
+
+Also implement a severity flag: if the modified word is part of a Name of God 
+(hardcode the relevant phrases from these four parashot, e.g. any occurrence forming 
+Hashem's name), tag the error as HOLY_NAME severity in the answer key.
+
+## Generation logic
+For each of NUM_TEXTS:
+1. Randomly pick one of the 4 parashot (roughly balanced across the 20 texts).
+2. Randomly pick ERRORS_PER_TEXT enabled error type(s) from ERROR_TYPES.
+3. Apply the injector(s) to a copy of the clean word list, tracking: parasha name, 
+   error type(s), the original word(s), the modified word(s), and the position 
+   (word index and a short surrounding-context snippet for locating it, e.g. 
+   "3 words after ... / 2 words before ...").
+4. Reassemble the modified word list into a text string.
+
+## Outputs
+1. One PNG image per test text in OUTPUT_DIR/images/, named test_01.png ... test_20.png:
+   - Render the Hebrew text right-to-left using PIL (Pillow), using FONT_PATH.
+   - Clean, readable layout: white background, black text, adequate line spacing and 
+     margins, wrap lines at IMAGE_WIDTH, right-aligned Hebrew.
+   - No highlighting of the error — the image must look like a normal, clean printed 
+     parasha text (the whole point is that the person searches for the mistake).
+   - Add a small header/footer with just the test number (e.g. "Test 07") — no other 
+     hints.
+2. A single answer_key.txt in OUTPUT_DIR/ listing, for each test number in order:
+   - Parasha name
+   - Error type(s) (using the taxonomy names above)
+   - Original word/phrase → what it was changed to
+   - Location hint (context snippet)
+   - HOLY_NAME flag if applicable
+   Format it in clearly separated blocks, one per test, easy to scan while 
+   self-checking.
+
+## Code quality requirements
+- Single Python file (or a small package if it gets long), well-commented, PEP8-ish.
+- Use only Pillow (PIL) for image rendering plus stdlib (random, json/dataclasses, 
+  pathlib). Avoid heavy NLP dependencies — this is deterministic string manipulation 
+  on a fixed corpus, not general NLP.
+- Handle Hebrew RTL rendering correctly in Pillow (right-align each line, draw from 
+  the right margin leftward, or use appropriate anchor settings — Hebrew doesn't need 
+  glyph shaping like Arabic, just correct RTL line layout and correct word order 
+  right-to-left).
+- Make sure the script is idempotent: running it clears/recreates OUTPUT_DIR.
+- Print a short summary to console when done (number of texts generated, output paths).
+
+## Deliverable
+After implementing, run the script once to confirm it produces 20 images + 1 answer key 
+without errors, and report the output folder structure back to me.

@@ -32,6 +32,18 @@ LINE_SPACING = 1.6       # Line height multiplier (× FONT_SIZE)
 ERRORS_PER_TEXT = 1      # Errors injected per worksheet (1 or 2 recommended)
 ERROR_TYPES = None       # None → all error types enabled; or pass a list of
                          # ErrorType enum members to restrict which are used
+TEXT_MODE = "MEZUZAH_ONLY"  # "ALL_PARASHOT" or "MEZUZAH_ONLY"
+MEZUZAH_BREAK_BETWEEN_PARASHOT = True
+HARD_MODE = True         # If True, only subtle/hard-to-spot error classes are used
+HARD_ERROR_TYPES = [
+    "MISSING_LETTER",
+    "EXTRA_LETTER",
+    "MALE_CHASER_SWAP",
+    "SIMILAR_LETTER_SWAP",
+    "LETTER_TRANSPOSITION",
+    "SIMILAR_FUNCTION_WORD_SWAP",
+    "SUFFIX_ERROR",
+]
 OUTPUT_DIR = "output"    # Directory for images/ and answer_key.txt
 RANDOM_SEED = None       # Set to an int for reproducible output (e.g. 42)
 
@@ -55,6 +67,7 @@ if not os.path.exists(FONT_PATH):
 # ============================================================
 
 import json
+import html
 import random
 import shutil
 import pathlib
@@ -65,6 +78,7 @@ from enum import Enum
 from typing import List, Tuple, Optional, Dict
 
 from PIL import Image, ImageDraw, ImageFont
+from PIL import features as pil_features
 
 # Optional: python-bidi for proper Unicode BiDi rendering.
 # Falls back to a simple reversal that works for pure Hebrew text.
@@ -73,6 +87,21 @@ try:
     _USE_BIDI = True
 except ImportError:
     _USE_BIDI = False
+
+
+def _has_raqm() -> bool:
+    """Return True if Pillow was built with libraqm (native BiDi/RTL support)."""
+    try:
+        if hasattr(pil_features, "check_feature"):
+            return bool(pil_features.check_feature("raqm"))
+        if hasattr(pil_features, "check"):
+            return bool(pil_features.check("raqm"))
+    except Exception:
+        return False
+    return False
+
+
+_USE_PIL_RTL = _has_raqm()
 
 
 # ============================================================
@@ -86,6 +115,7 @@ PARASHOT_NAMES = {
     "vehaya_ki_yeviacha":   "והיה כי יביאך (שמות יג:יא-טז)",
     "shema":                "שמע (דברים ו:ד-ט)",
     "vehaya_im_shamoa":     "והיה אם שמוע (דברים יא:יג-כא)",
+    "mezuzah":              "מזוזה (שמע + והיה אם שמוע)",
 }
 
 # Sefaria API references for each parasha
@@ -105,8 +135,14 @@ SEFARIA_REFS = {
 #   U+05B0–U+05BC  nikkud (vowel points)
 #   U+05C1–U+05C2  shin/sin dot
 #   U+05C7         qamats qatan
+#
+# Important: keep U+05BE (maqaf) so it can later become a word boundary
+# instead of fusing words together (e.g. "אל־משה" -> "אל משה").
 _STRIP_CHARS = frozenset(
-    list(range(0x0591, 0x05C3)) + [0x05C7]
+    list(range(0x0591, 0x05B0))
+    + list(range(0x05B0, 0x05BD))
+    + list(range(0x05C1, 0x05C3))
+    + [0x05C7]
 )
 
 
@@ -155,6 +191,7 @@ STAM_SPELLING_OVERRIDES: Dict[str, Dict[int, str]] = {
 SCRIPT_DIR   = pathlib.Path(__file__).parent
 FALLBACK_FILE = SCRIPT_DIR / "parashot_fallback.json"
 CACHE_FILE    = SCRIPT_DIR / "parashot_cache.json"
+CACHE_FORMAT_VERSION = 5
 
 
 def _load_json(path: pathlib.Path) -> Optional[Dict]:
@@ -170,6 +207,22 @@ def _save_json(path: pathlib.Path, data: Dict) -> None:
         json.dump(data, fh, ensure_ascii=False, indent=2)
 
 
+def _is_cache_valid(cached: Optional[Dict]) -> bool:
+    """Validate cache shape/version so stale formats are automatically refreshed."""
+    if not isinstance(cached, dict):
+        return False
+    meta = cached.get("_meta", {})
+    if not isinstance(meta, dict):
+        return False
+    if meta.get("format_version") != CACHE_FORMAT_VERSION:
+        return False
+    for k in PARASHA_KEYS:
+        words = cached.get(k)
+        if not isinstance(words, list) or not words or not all(isinstance(w, str) for w in words):
+            return False
+    return True
+
+
 def _fetch_sefaria(ref: str) -> List[str]:
     """Fetch one parasha from Sefaria API; return clean word list."""
     import re
@@ -182,9 +235,25 @@ def _fetch_sefaria(ref: str) -> List[str]:
         # List of verse strings
         he = " ".join(v for v in he if isinstance(v, str))
 
-    # Strip nikkud/cantillation and any HTML tags
+    # Remove annotation blocks entirely (not part of the verse text).
+    he = re.sub(r"<sup[^>]*>.*?</sup>", " ", he, flags=re.IGNORECASE | re.DOTALL)
+    he = re.sub(r"<i[^>]*>.*?</i>", " ", he, flags=re.IGNORECASE | re.DOTALL)
+    he = re.sub(r"<span[^>]*>.*?</span>", " ", he, flags=re.IGNORECASE | re.DOTALL)
+
+    # Strip nikkud/cantillation and normalize separators.
     clean = strip_nikkud(he)
     clean = re.sub(r"<[^>]+>", "", clean)
+    clean = html.unescape(clean)
+    clean = re.sub(r"\{[^}]*\}", " ", clean)
+
+    # Treat maqaf and sof pasuq as explicit word boundaries.
+    clean = clean.replace("־", " ")
+    clean = clean.replace("׃", " ")
+
+    # Remove all other non-Hebrew artifacts (HTML leftovers, bidi marks, punctuation)
+    # without introducing extra splits inside words.
+    clean = re.sub(r"[^\u05d0-\u05ea\s]", "", clean)
+
     clean = re.sub(r"\s+", " ", clean).strip()
     return clean.split()
 
@@ -215,7 +284,7 @@ def load_parashot() -> Dict[str, List[str]]:
     """
     # 1. Cache
     cached = _load_json(CACHE_FILE)
-    if cached and all(k in cached for k in PARASHA_KEYS):
+    if _is_cache_valid(cached):
         print("[INFO] Loaded parashot text from local cache.")
         return _apply_overrides({k: cached[k] for k in PARASHA_KEYS})
 
@@ -224,7 +293,14 @@ def load_parashot() -> Dict[str, List[str]]:
     try:
         for key, ref in SEFARIA_REFS.items():
             fetched[key] = _fetch_sefaria(ref)
-        _save_json(CACHE_FILE, fetched)
+        cache_payload = {
+            "_meta": {
+                "format_version": CACHE_FORMAT_VERSION,
+                "source": "sefaria",
+            }
+        }
+        cache_payload.update(fetched)
+        _save_json(CACHE_FILE, cache_payload)
         print(f"[INFO] Fetched parashot from Sefaria; cached to {CACHE_FILE}")
         return _apply_overrides(fetched)
     except Exception as exc:
@@ -334,6 +410,9 @@ def inject_missing_letter(
         word = words[idx]
         # Prefer positions where adjacent letters are the same
         dup_pos = [i for i in range(len(word) - 1) if word[i] == word[i + 1]]
+        if HARD_MODE and not dup_pos:
+            # In hard mode, avoid conspicuous deletions from arbitrary locations.
+            continue
         pos = rng.choice(dup_pos) if dup_pos else rng.randint(0, len(word) - 1)
         new_word = word[:pos] + word[pos + 1:]
         if new_word and new_word != word:
@@ -811,6 +890,8 @@ def _to_visual(word: str) -> str:
     Otherwise, fall back to a simple character reversal which is correct for
     pure Hebrew text with no mixed scripts.
     """
+    if _USE_PIL_RTL:
+        return word
     if _USE_BIDI:
         return _bidi_get_display(word)
     return word[::-1]
@@ -835,12 +916,15 @@ def _wrap_words_to_lines(
     space_w: float = font.getlength(" ")
 
     for word in words:
-        vis = _to_visual(word)
-        ww = font.getlength(vis)
+        ww = font.getlength(word)
         add_w = ww if not current else ww + space_w
         if current and current_w + add_w > max_width:
-            # Emit completed line: reverse word order for RTL display
-            lines.append(" ".join(_to_visual(w) for w in reversed(current)))
+            if _USE_PIL_RTL:
+                # Keep logical order; Pillow+libraqm handles RTL display.
+                lines.append(" ".join(current))
+            else:
+                # Manual fallback when native RTL shaping isn't available.
+                lines.append(" ".join(_to_visual(w) for w in reversed(current)))
             current = [word]
             current_w = ww
         else:
@@ -848,7 +932,10 @@ def _wrap_words_to_lines(
             current_w += add_w
 
     if current:
-        lines.append(" ".join(_to_visual(w) for w in reversed(current)))
+        if _USE_PIL_RTL:
+            lines.append(" ".join(current))
+        else:
+            lines.append(" ".join(_to_visual(w) for w in reversed(current)))
 
     return lines
 
@@ -856,18 +943,44 @@ def _wrap_words_to_lines(
 def render_text_image(
     words: List[str],
     test_num: int,
+    paragraph_break_indices: Optional[List[int]] = None,
 ) -> Image.Image:
     """Render a Hebrew word list as a PIL Image with a test-number header/footer."""
     font       = ImageFont.truetype(FONT_PATH, FONT_SIZE)
-    small_font = ImageFont.truetype(FONT_PATH, max(16, FONT_SIZE // 2))
+    # The STA"M font may not contain Latin glyphs for the "Test NN" label.
+    label_size = max(16, FONT_SIZE // 2)
+    if os.path.exists("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"):
+        small_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", label_size)
+    else:
+        small_font = ImageFont.truetype(FONT_PATH, label_size)
 
     usable_w = IMAGE_WIDTH - 2 * IMAGE_MARGIN
-    lines    = _wrap_words_to_lines(words, font, usable_w)
+
+    # Split into display paragraphs (used for mezuzah mode: Shema + Vehaya im shamoa).
+    paragraphs: List[List[str]] = []
+    if paragraph_break_indices:
+        points = sorted({p for p in paragraph_break_indices if 0 < p < len(words)})
+        start = 0
+        for p in points:
+            if p > start:
+                paragraphs.append(words[start:p])
+            start = p
+        if start < len(words):
+            paragraphs.append(words[start:])
+    else:
+        paragraphs = [words]
+
+    lines: List[Optional[str]] = []
+    for i, paragraph in enumerate(paragraphs):
+        lines.extend(_wrap_words_to_lines(paragraph, font, usable_w))
+        if i < len(paragraphs) - 1:
+            lines.append(None)
 
     line_h   = int(FONT_SIZE * LINE_SPACING)
     header_h = int(FONT_SIZE * 1.5)
     footer_h = int(FONT_SIZE * 1.2)
-    body_h   = len(lines) * line_h
+    paragraph_gap_h = int(line_h * 0.9)
+    body_h   = sum(line_h if line is not None else paragraph_gap_h for line in lines)
     total_h  = header_h + body_h + footer_h + 2 * IMAGE_MARGIN
 
     img  = Image.new("RGB", (IMAGE_WIDTH, total_h), "white")
@@ -887,9 +1000,23 @@ def render_text_image(
     # ---- Body (right-aligned Hebrew lines) ----
     y = IMAGE_MARGIN + header_h
     for line in lines:
-        line_w = font.getlength(line)
-        x = IMAGE_WIDTH - IMAGE_MARGIN - line_w
-        draw.text((x, y), line, fill="black", font=font, anchor="lt")
+        if line is None:
+            y += paragraph_gap_h
+            continue
+        if _USE_PIL_RTL:
+            draw.text(
+                (IMAGE_WIDTH - IMAGE_MARGIN, y),
+                line,
+                fill="black",
+                font=font,
+                anchor="ra",
+                direction="rtl",
+                language="he",
+            )
+        else:
+            line_w = font.getlength(line)
+            x = IMAGE_WIDTH - IMAGE_MARGIN - line_w
+            draw.text((x, y), line, fill="black", font=font, anchor="lt")
         y += line_h
 
     # ---- Footer (centred, gray) ----
@@ -943,14 +1070,28 @@ def generate_all(
         if ERROR_TYPES is not None
         else list(ErrorType)
     )
+    if HARD_MODE:
+        hard_set = set(HARD_ERROR_TYPES)
+        enabled = [etype for etype in enabled if etype.value in hard_set]
+    if not enabled:
+        sys.exit("ERROR: no enabled error types after filtering.")
 
     records: List[Tuple[int, str, List[ErrorRecord]]] = []
 
     for i in range(NUM_TEXTS):
         test_num = i + 1
-        # Cycle through parashot in order for balanced distribution
-        pk = PARASHA_KEYS[i % len(PARASHA_KEYS)]
-        words = list(parashot[pk])
+        break_points: List[int] = []
+        if TEXT_MODE == "MEZUZAH_ONLY":
+            pk = "mezuzah"
+            shema_words = list(parashot["shema"])
+            vehaya_words = list(parashot["vehaya_im_shamoa"])
+            words = shema_words + vehaya_words
+            if MEZUZAH_BREAK_BETWEEN_PARASHOT:
+                break_points = [len(shema_words)]
+        else:
+            # Cycle through parashot in order for balanced distribution
+            pk = PARASHA_KEYS[i % len(PARASHA_KEYS)]
+            words = list(parashot[pk])
 
         errors_applied: List[ErrorRecord] = []
         for _ in range(ERRORS_PER_TEXT):
@@ -959,12 +1100,13 @@ def generate_all(
             try:
                 words, rec = injector(words, rng)
             except RuntimeError as exc:
-                print(f"  [WARN] test {test_num} — {exc}; falling back to MISSING_LETTER")
-                words, rec = inject_missing_letter(words, rng)
+                fallback = inject_similar_letter_swap if HARD_MODE else inject_missing_letter
+                print(f"  [WARN] test {test_num} — {exc}; falling back to {fallback.__name__}")
+                words, rec = fallback(words, rng)
             rec.parasha_key = pk
             errors_applied.append(rec)
 
-        img = render_text_image(words, test_num)
+        img = render_text_image(words, test_num, paragraph_break_indices=break_points)
         img_path = images_dir / f"test_{test_num:02d}.png"
         img.save(str(img_path))
 

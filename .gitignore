@@ -1,5 +1,4 @@
 # Generated outputs (recreated on every run)
-output/
 
 # Sefaria API text cache (auto-generated on first run with network)
 parashot_cache.json

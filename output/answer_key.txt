@@ -1,0 +1,163 @@
+STA"M PROOFREADING PRACTICE — ANSWER KEY
+============================================================
+
+TEST 01
+----------------------------------------
+  Parasha : מזוזה (שמע + והיה אם שמוע)
+  Error type : LETTER_TRANSPOSITION
+  Changed    : «יפתה» → «פיתה»
+  Location   : word #88, after: «לכם פן», before: «לבבכם וסרתם»
+  Detail     : transposed 'י' and 'פ' at positions 1–2
+
+TEST 02
+----------------------------------------
+  Parasha : מזוזה (שמע + והיה אם שמוע)
+  Error type : EXTRA_LETTER
+  Changed    : «מצוה» → «מצוהה»
+  Location   : word #57, after: «אשר אנכי», before: «אתכם היום»
+  Detail     : duplicated 'ה' at position 4
+
+TEST 03
+----------------------------------------
+  Parasha : מזוזה (שמע + והיה אם שמוע)
+  Error type : MALE_CHASER_SWAP
+  Changed    : «למען» → «למוען»
+  Location   : word #154, after: «ביתך ובשעריך», before: «ירבו ימיכם»
+  Detail     : inserted 'ו' at position 3 (defective → plene)
+
+TEST 04
+----------------------------------------
+  Parasha : מזוזה (שמע + והיה אם שמוע)
+  Error type : LETTER_TRANSPOSITION
+  Changed    : «תשמעו» → «תמשעו»
+  Location   : word #52, after: «אם שמע», before: «אל מצותי»
+  Detail     : transposed 'ש' and 'מ' at positions 2–3
+
+TEST 05
+----------------------------------------
+  Parasha : מזוזה (שמע + והיה אם שמוע)
+  Error type : MISSING_LETTER
+  Changed    : «ונתתי» → «ונתי»
+  Location   : word #79, after: «ותירשך ויצהרך», before: «עשב בשדך»
+  Detail     : removed 'ת' at position 3
+
+TEST 06
+----------------------------------------
+  Parasha : מזוזה (שמע + והיה אם שמוע)
+  Error type : LETTER_TRANSPOSITION
+  Changed    : «בין» → «בןי»
+  Location   : word #42, after: «והיו לטטפת», before: «עיניך וכתבתם»
+  Detail     : transposed 'י' and 'ן' at positions 2–3
+
+TEST 07
+----------------------------------------
+  Parasha : מזוזה (שמע + והיה אם שמוע)
+  Error type : EXTRA_LETTER
+  Changed    : «עיניך» → «עייניך»
+  Location   : word #43, after: «לטטפת בין», before: «וכתבתם על»
+  Detail     : duplicated 'י' at position 2
+
+TEST 08
+----------------------------------------
+  Parasha : מזוזה (שמע + והיה אם שמוע)
+  Error type : SIMILAR_FUNCTION_WORD_SWAP
+  Changed    : «את» → «אם»
+  Location   : word #109, after: «לא תתן», before: «יבולה ואבדתם»
+  Detail     : swapped function word 'את' → 'אם'
+
+TEST 09
+----------------------------------------
+  Parasha : מזוזה (שמע + והיה אם שמוע)
+  Error type : EXTRA_LETTER
+  Changed    : «עשב» → «עששב»
+  Location   : word #80, after: «ויצהרך ונתתי», before: «בשדך לבהמתך»
+  Detail     : duplicated 'ש' at position 2
+
+TEST 10
+----------------------------------------
+  Parasha : מזוזה (שמע + והיה אם שמוע)
+  Error type : SUFFIX_ERROR
+  Changed    : «אנכי» → «אנכה»
+  Location   : word #21, after: «האלה אשר», before: «מצוך היום»
+  Detail     : suffix changed: '-י' → '-ה'
+
+TEST 11
+----------------------------------------
+  Parasha : מזוזה (שמע + והיה אם שמוע)
+  Error type : MALE_CHASER_SWAP
+  Changed    : «ובכל» → «ובוכל»
+  Location   : word #15, after: «ובכל נפשך», before: «מאדך והיו»
+  Detail     : inserted 'ו' at position 3 (defective → plene)
+
+TEST 12
+----------------------------------------
+  Parasha : מזוזה (שמע + והיה אם שמוע)
+  Error type : EXTRA_LETTER
+  Changed    : «בדרך» → «בבדרך»
+  Location   : word #146, after: «בביתך ובלכתך», before: «ובשכבך ובקומך»
+  Detail     : duplicated 'ב' at position 1
+
+TEST 13
+----------------------------------------
+  Parasha : מזוזה (שמע + והיה אם שמוע)
+  Error type : MISSING_LETTER
+  Changed    : «לבבכם» → «לבכם»
+  Location   : word #66, after: «ולעבדו בכל», before: «ובכל נפשכם»
+  Detail     : removed 'ב' at position 2
+
+TEST 14
+----------------------------------------
+  Parasha : מזוזה (שמע + והיה אם שמוע)
+  Error type : SIMILAR_LETTER_SWAP
+  Changed    : «אתם» → «אתס»
+  Location   : word #138, after: «עיניכם ולמדתם», before: «את בניכם»
+  Detail     : replaced 'ם' with 'ס' at position 3
+
+TEST 15
+----------------------------------------
+  Parasha : מזוזה (שמע + והיה אם שמוע)
+  Error type : EXTRA_LETTER
+  Changed    : «בכל» → «בככל»
+  Location   : word #65, after: «אלהיכם ולעבדו», before: «לבבכם ובכל»
+  Detail     : duplicated 'כ' at position 2
+
+TEST 16
+----------------------------------------
+  Parasha : מזוזה (שמע + והיה אם שמוע)
+  Error type : MISSING_LETTER
+  Changed    : «בביתך» → «ביתך»
+  Location   : word #31, after: «בם בשבתך», before: «ובלכתך בדרך»
+  Detail     : removed 'ב' at position 1
+
+TEST 17
+----------------------------------------
+  Parasha : מזוזה (שמע + והיה אם שמוע)
+  Error type : MALE_CHASER_SWAP
+  Changed    : «לבהמתך» → «לבהומתך»
+  Location   : word #82, after: «עשב בשדך», before: «ואכלת ושבעת»
+  Detail     : inserted 'ו' at position 4 (defective → plene)
+
+TEST 18
+----------------------------------------
+  Parasha : מזוזה (שמע + והיה אם שמוע)
+  Error type : SIMILAR_FUNCTION_WORD_SWAP
+  Changed    : «את» → «אם»
+  Location   : word #121, after: «לכם ושמתם», before: «דברי אלה»
+  Detail     : swapped function word 'את' → 'אם'
+
+TEST 19
+----------------------------------------
+  Parasha : מזוזה (שמע + והיה אם שמוע)
+  Error type : SIMILAR_FUNCTION_WORD_SWAP
+  Changed    : «אם» → «את»
+  Location   : word #50, after: «ובשעריך והיה», before: «שמע תשמעו»
+  Detail     : swapped function word 'אם' → 'את'
+
+TEST 20
+----------------------------------------
+  Parasha : מזוזה (שמע + והיה אם שמוע)
+  Error type : SIMILAR_FUNCTION_WORD_SWAP
+  Changed    : «את» → «אם»
+  Location   : word #8, after: «אחד ואהבת», before: «יהוה אלהיך»
+  Detail     : swapped function word 'את' → 'אם'
+
