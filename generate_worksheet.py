@@ -686,7 +686,9 @@ FUNCTION_WORD_SWAP_PAIRS: List[Tuple[str, str]] = [
     ("זה",  "זו"),
     ("זו",  "זה"),
     ("בך",  "בם"),
+    ("בם",  "בך"),
     ("בו",  "בך"),
+    ("בך",  "בו"),
 ]
 
 _FUNC_MAP: Dict[str, List[str]] = {}
